@@ -2,7 +2,7 @@
  * @Author: Guevara-666 2662443905@qq.com
  * @Date: 2026-09-19 11:34:01
  * @LastEditors: Guevara-666 2662443905@qq.com
- * @LastEditTime: 2026-09-20 17:28:41
+ * @LastEditTime: 2026-09-21 21:58:15
  * @FilePath: \sec\C_board_src\ControlTask.cpp
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -18,23 +18,23 @@ Gm6020 motor(2);
 
 // 实例化 PID 控制器 (参数需根据实际调试调整)
 // Kp, Ki, Kd, 输出上限, 输出下限
-//Pid speed_pid(20.0f, 0.5f, 0.0f, 16384.0f, -16384.0f);
+Pid speed_pid(20.0f, 0.5f, 0.0f, 16384.0f, -16384.0f);
 
 // 位置控制
-Pid pos_pid(1800.0f, 3.0f, 0.08f, 16384.0f, -16384.0f);
+//Pid pos_pid(250.0f, 1.0f, 0.01f, 16384.0f, -16384.0f);
 
 
 // 正弦相关变量
-//float time_s = 0.0f;
-//const float amplitude_rpm = 100.0f; // 正弦速度幅值 100 rpm
-//const float frequency_hz  = 0.5f;   // 频率 0.5 Hz (周期2秒)
+float time_s = 0.0f;
+const float amplitude_rpm = 100.0f; // 正弦速度幅值 100 rpm
+const float frequency_hz  = 0.5f;   // 频率 0.5 Hz (周期2秒)
 
+/*
 // 正弦位置控制相关变量
-
 float time_s = 0.0f;
 const float amplitude_rad = 1.0f;    // 正弦位置幅值
 const float frequency_hz  = 0.5f;    // 0.5 Hz
-
+*/
 
 extern "C" {
 
@@ -74,23 +74,53 @@ void MainTask(void) {
     // 1kHz 周期执行
     time_s += 0.001f; // 累加时间
 
+    static float target_rpm = 0.0f;
+    static float current_rpm = 0.0f;
+    static float voltage_out = 0.0f;
+
     // 计算目标正弦速度 (rpm)
-    //float target_rpm = amplitude_rpm * sinf(2.0f * 3.1415926f * frequency_hz * time_s);
+    target_rpm = amplitude_rpm * sinf(2.0f * 3.1415926f * frequency_hz * time_s);
 
     // 获取当前电机速度 (rpm)
-    //float current_rpm = (float)motor.velRpm();
+    current_rpm = (float)motor.velRpm();
 
     // PID 计算输出电压 (-25000 ~ 25000) -> (-16384 ~ 16384)(电流控制)
-    //float voltage_out = speed_pid.calc(target_rpm, current_rpm);
+    voltage_out = speed_pid.calc(target_rpm, current_rpm);
     
-    // 目标位置 (rad) —— 注意用 sinf 后乘以幅值
-    float target_rad = amplitude_rad * sinf(2.0f * 3.1415926f * frequency_hz * time_s);
+    /*
+    static float target_rad = 0.0f;
+    static float current_rad = 0.0f;
+    static float voltage_out = 0.0f;
 
-    // 当前累计位置 (rad) —— 用 motor.angle(), 支持多圈
-    float current_rad = motor.angle();
+
+    // 1. 读原始反馈并滤波
+    static float filtered_angle = 0.0f;
+    const float alpha = 0.4f;
+
+    // 首次运行时，直接用原始值初始化滤波值，避免从 0 爬升
+    if (filtered_angle == 0.0f) {
+        filtered_angle = 57.3f * motor.angle();
+    }
+
+    filtered_angle = alpha * (57.3f * motor.angle()) + (1.0f - alpha) * filtered_angle;
+    current_rad = filtered_angle;
+
+    // 2. 计算正弦目标
+    float sine_target = 57.3f * amplitude_rad * sinf(2.0f * 3.1415926f * frequency_hz * time_s);
+
+    // 3. 启动斜坡：目标从当前反馈值平滑过渡到正弦目标
+    static float startup_ramp = 0.0f;
+    if (startup_ramp < 1.0f) {
+        startup_ramp += 0.0005f;
+        if (startup_ramp > 1.0f) startup_ramp = 1.0f;
+    }
+
+    target_rad = current_rad * (1.0f - startup_ramp) + sine_target * startup_ramp;
     
-    float voltage_out = pos_pid.calc(target_rad, current_rad);
 
+    // 4. PID
+    voltage_out = pos_pid.calc(target_rad, current_rad);
+    */
 
     // 设置电机电压并发送 CAN 报文
     motor.setVoltage((int16_t)voltage_out);
